@@ -4,23 +4,42 @@ format: html
 editor: visual
 ---
 
-## Quarto
-
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
-
-## Running Code
-
-When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
-
 ```{r}
-1 + 1
+library(dplyr)
+library(tidyr)
+library(janitor)
+
 ```
 
-You can add options to executable code like this
+## Lectura de CSV
+
+Luego de abrir las librerias necesarias, utilizo la funcion ***read.csv*** para leer los archivos csv desde donde trabajare y las guardare en el *environment* con los nombres "[internet]{.underline}" - para los datos sobre el uso y los usuarios del internet- y metadata - para los metadatos de los paises -
 
 ```{r}
-#| echo: false
-2 * 2
+
+internet <-  read.csv("../data/internet_users_world_wide.csv", skip = 4)
+
+metadata <- read.csv("../data/metadata_countries_internet_users.csv")
+
+names(internet)
 ```
 
-The `echo: false` option disables the printing of code (only output is displayed).
+## Pivoteo
+
+Utilizo la funcion *pivot_longer* para cambiar el formato de la tabla a un fromato **Long.** De esta forma, en vez de tener una tabla con cada año como columna, obtengo una tabla con una columna de año y otra con los valores por cada año para cada país.
+
+```{r}
+internet_long <- internet %>%
+  pivot_longer(
+    cols = -c(Country.Name, Country.Code, Indicator.Name, Indicator.Code),
+    names_to = "year",
+    values_to = "internet_users"
+  )
+```
+
+Con [***drop_na***]{.underline} elimino los datos NA de la tabla para quedarme solo con los que necesito de cada país.
+
+```{r}
+internet_long <- internet_long %>%
+  drop_na(internet_users)
+```
