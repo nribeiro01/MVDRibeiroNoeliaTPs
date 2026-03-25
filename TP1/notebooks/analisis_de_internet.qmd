@@ -46,7 +46,7 @@ internet_long <- internet_long %>%
 
 ## 4) Cruce de Datos
 
-Con ***left_join*** unifico las bases de datos de [*internet*]{.underline} y de [*metadata*]{.underline} para tener un solo dataframe. Al hacer left join lo que hago es: agregar al dataframe de [*internet*]{.underline} las columnas de [*metadata*]{.underline} que no aparecen en el primero ( Income group, Region) ~*\[Para\ no\ perder\ datos\ hago\ el\ left_join\ en\ un\ nuevo\ dataframe,\ pero\ se\ pude\ modificar\ directamente\ sobre\ la\ base\ de\ datos\ original\]*~
+Con ***left_join*** unifico las bases de datos de [*internet*]{.underline} y de [*metadata*]{.underline} para tener un solo dataframe. Al hacer left join lo que hago es: agregar al dataframe de [*internet*]{.underline} las columnas de [*metadata*]{.underline} que no aparecen en el primero ( Income group, Region) ~*\[Para\ no\ perder\ datos\ hago\ el\ left_join\ en\ un\ nuevo\ dataframe,\ pero\ se\ puede\ modificar\ directamente\ sobre\ la\ base\ de\ datos\ original\]*~
 
 ```{r}
 datos <- internet_long %>% 
