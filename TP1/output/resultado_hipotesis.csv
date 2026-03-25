@@ -1,0 +1,177 @@
+"year","IncomeGroup","promedio_internet"
+"X1990","",0
+"X1990","High income",0.0621297530864197
+"X1990","Low income",0
+"X1990","Lower middle income",0
+"X1990","Upper middle income",0
+"X1991","High income",0.404170740740741
+"X1991","Low income",0
+"X1991","Lower middle income",0
+"X1991","Upper middle income",0.002815275
+"X1992","",0.0121
+"X1992","High income",0.584314205882353
+"X1992","Low income",0
+"X1992","Lower middle income",5.55e-05
+"X1992","Upper middle income",0.0078604
+"X1993","",0.0416
+"X1993","High income",0.710129523809524
+"X1993","Low income",0
+"X1993","Lower middle income",0.000398
+"X1993","Upper middle income",0.0192061428571429
+"X1994","",0.0555
+"X1994","High income",1.21789265306122
+"X1994","Low income",0
+"X1994","Lower middle income",0.0045298
+"X1994","Upper middle income",0.03135164
+"X1995","",0.06100875
+"X1995","High income",2.03063380952381
+"X1995","Low income",0.00134222222222222
+"X1995","Lower middle income",0.0161866
+"X1995","Upper middle income",0.0829323512820513
+"X1996","",0.12485
+"X1996","High income",3.36005070422535
+"X1996","Low income",0.00411761111111111
+"X1996","Lower middle income",0.0432583611111111
+"X1996","Upper middle income",0.213159772727273
+"X1997","",0.197985
+"X1997","High income",5.96824084507042
+"X1997","Low income",0.0193756086956522
+"X1997","Lower middle income",0.123099025
+"X1997","Upper middle income",0.401624444444444
+"X1998","",0.69483
+"X1998","High income",9.59705633802817
+"X1998","Low income",0.0416188260869565
+"X1998","Lower middle income",0.272862222222222
+"X1998","Upper middle income",0.89925652173913
+"X1999","",1.42625
+"X1999","High income",14.46575
+"X1999","Low income",0.1062
+"X1999","Lower middle income",0.496026083333333
+"X1999","Upper middle income",1.5045306122449
+"X2000","",1.6874319
+"X2000","High income",20.5566152702703
+"X2000","Low income",0.157478474347826
+"X2000","Lower middle income",0.958751212765957
+"X2000","Upper middle income",2.76567938
+"X2001","",2.3365812
+"X2001","High income",25.1459043243243
+"X2001","Low income",0.21969619875
+"X2001","Lower middle income",1.30335676483673
+"X2001","Upper middle income",3.71020528
+"X2002","",2.49142615
+"X2002","High income",31.2632930666667
+"X2002","Low income",0.415810225
+"X2002","Lower middle income",1.76776158588
+"X2002","Upper middle income",5.93458825490196
+"X2003","",3.802886
+"X2003","High income",36.0270135135135
+"X2003","Low income",0.600401052173913
+"X2003","Lower middle income",2.52886205918367
+"X2003","Upper middle income",7.35864780851064
+"X2004","",4.2799025
+"X2004","High income",40.4503506756757
+"X2004","Low income",0.819981008695652
+"X2004","Lower middle income",3.58566559795918
+"X2004","Upper middle income",9.78134368
+"X2005","",11.0649331428571
+"X2005","High income",44.1605797333333
+"X2005","Low income",1.12530745454545
+"X2005","Lower middle income",4.448724534
+"X2005","Upper middle income",11.5257038627451
+"X2006","",12.6010083714286
+"X2006","High income",48.4168802666667
+"X2006","Low income",1.48587465
+"X2006","Lower middle income",5.43616636
+"X2006","Upper middle income",13.5440618076923
+"X2007","",15.0771428571429
+"X2007","High income",53.0030253333333
+"X2007","Low income",2.190060375
+"X2007","Lower middle income",6.62004966
+"X2007","Upper middle income",15.8831064150943
+"X2008","",17.1722857142857
+"X2008","High income",57.214904
+"X2008","Low income",2.42076434782609
+"X2008","Lower middle income",8.01823959183674
+"X2008","Upper middle income",18.7485371698113
+"X2009","",19.5268571428571
+"X2009","High income",60.7211013333333
+"X2009","Low income",3.17103869565217
+"X2009","Lower middle income",9.56551020408163
+"X2009","Upper middle income",22.2850943396226
+"X2010","",22.252
+"X2010","High income",63.8759413333333
+"X2010","Low income",3.92136363636364
+"X2010","Lower middle income",12.0838775510204
+"X2010","Upper middle income",26.2498113207547
+"X2011","",24.5748571428571
+"X2011","High income",66.6194025974026
+"X2011","Low income",4.29292608695652
+"X2011","Lower middle income",13.9934085714286
+"X2011","Upper middle income",30.2565169811321
+"X2012","",27.1842885714286
+"X2012","High income",70.174628
+"X2012","Low income",4.92480347826087
+"X2012","Lower middle income",16.0624224489796
+"X2012","Upper middle income",34.3378603773585
+"X2013","",29.32
+"X2013","High income",73.4350465753425
+"X2013","Low income",5.70714
+"X2013","Lower middle income",18.3004081632653
+"X2013","Upper middle income",38.142541509434
+"X2014","",31.8
+"X2014","High income",75.7185438356164
+"X2014","Low income",6.70992913043478
+"X2014","Lower middle income",21.349358
+"X2014","Upper middle income",42.8955603773585
+"X2015","",34.61872
+"X2015","High income",77.6084273972603
+"X2015","Low income",7.90711043478261
+"X2015","Lower middle income",24.6651304
+"X2015","Upper middle income",47.2025711538462
+"X2016","",37.9704828571429
+"X2016","High income",80.1593666666667
+"X2016","Low income",10.2402308333333
+"X2016","Lower middle income",28.4620622
+"X2016","Upper middle income",51.3160692307692
+"X2017","",40.7
+"X2017","High income",81.6225246753247
+"X2017","Low income",12.0135143478261
+"X2017","Lower middle income",32.6804214
+"X2017","Upper middle income",55.9208528301887
+"X2018","",43.0764705882353
+"X2018","High income",83.7618803278689
+"X2018","Low income",14.0408045
+"X2018","Lower middle income",38.28114
+"X2018","Upper middle income",61.4559387755102
+"X2019","",46.7441176470588
+"X2019","High income",85.5324666666667
+"X2019","Low income",16.3168861904762
+"X2019","Lower middle income",41.4644854166667
+"X2019","Upper middle income",65.21316
+"X2020","",51.5432235294118
+"X2020","High income",87.9315092307692
+"X2020","Low income",17.4100481818182
+"X2020","Lower middle income",46.6472212765957
+"X2020","Upper middle income",70.5676196078431
+"X2021","",54.8087676470588
+"X2021","High income",89.9236492307692
+"X2021","Low income",20.2214444444444
+"X2021","Lower middle income",52.0697222222222
+"X2021","Upper middle income",75.0151653846154
+"X2022","",58.8909090909091
+"X2022","High income",90.9727015384615
+"X2022","Low income",22.8300789473684
+"X2022","Lower middle income",54.1347673913044
+"X2022","Upper middle income",77.0286192307692
+"X2023","",60.9181818181818
+"X2023","High income",91.6304609375
+"X2023","Low income",24.1676666666667
+"X2023","Lower middle income",56.7070382978723
+"X2023","Upper middle income",79.2040288461538
+"X2024","",62.7333333333333
+"X2024","High income",92.7218233333333
+"X2024","Low income",8.94983
+"X2024","Lower middle income",59.5631
+"X2024","Upper middle income",87.3215625
+"X2025","",60.9060606060606
+"X2025","Lower middle income",70
