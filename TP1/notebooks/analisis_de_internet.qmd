@@ -11,7 +11,7 @@ library(janitor)
 
 ```
 
-## Lectura de CSV
+## 1)Lectura de CSV
 
 Luego de abrir las librerias necesarias, utilizo la funcion ***read.csv*** para leer los archivos csv desde donde trabajare y las guardare en el *environment* con los nombres "[internet]{.underline}" - para los datos sobre el uso y los usuarios del internet- y metadata - para los metadatos de los paises -
 
@@ -24,9 +24,9 @@ metadata <- read.csv("../data/metadata_countries_internet_users.csv")
 names(internet)
 ```
 
-## Pivoteo
+## 2 y 3) Pivoteo y NA's
 
-Utilizo la funcion *pivot_longer* para cambiar el formato de la tabla a un fromato **Long.** De esta forma, en vez de tener una tabla con cada año como columna, obtengo una tabla con una columna de año y otra con los valores por cada año para cada país.
+Utilizo la funcion *pivot_longer* para cambiar el formato de la tabla a un fromato **Long.** De esta forma, en vez de tener una tabla con cada año como columna, obtengo una tabla con una columna de año y otra con los valores por cada año para cada país. ^~\[Guardo\ la\ base\ long\ en\ una\ nueva\ variable\ para\ tener\ un\ registro\ de\ los\ cambios\ en\ la\ base\ de\ datos\]~^
 
 ```{r}
 internet_long <- internet %>%
@@ -42,4 +42,13 @@ Con [***drop_na***]{.underline} elimino los datos NA de la tabla para quedarme s
 ```{r}
 internet_long <- internet_long %>%
   drop_na(internet_users)
+```
+
+## 4) Cruce de Datos
+
+Con ***left_join*** unifico las bases de datos de [*internet*]{.underline} y de [*metadata*]{.underline} para tener un solo dataframe. Al hacer left join lo que hago es: agregar al dataframe de [*internet*]{.underline} las columnas de [*metadata*]{.underline} que no aparecen en el primero ( Income group, Region) ~*\[Para\ no\ perder\ datos\ hago\ el\ left_join\ en\ un\ nuevo\ dataframe,\ pero\ se\ pude\ modificar\ directamente\ sobre\ la\ base\ de\ datos\ original\]*~
+
+```{r}
+datos <- internet_long %>% 
+  left_join (metadata, by = "Country.Code")
 ```
