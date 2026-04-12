@@ -21,34 +21,93 @@ internet <-  read.csv("../data/internet_users_world_wide.csv", skip = 4)
 
 metadata <- read.csv("../data/metadata_countries_internet_users.csv")
 
-names(internet)
+# Limpio las bases
+
+internet <- internet %>% clean_names()
+metadata <- metadata %>% clean_names()
+
 ```
 
 ## 2 y 3) Pivoteo y NA's
 
-Utilizo la funcion *pivot_longer* para cambiar el formato de la tabla a un fromato **Long.** De esta forma, en vez de tener una tabla con cada año como columna, obtengo una tabla con una columna de año y otra con los valores por cada año para cada país. ^~\[Guardo\ la\ base\ long\ en\ una\ nueva\ variable\ para\ tener\ un\ registro\ de\ los\ cambios\ en\ la\ base\ de\ datos\]~^
+Utilizo la funcion *pivot_longer* para cambiar el formato de la tabla a un fromato **Long.** De esta forma, en vez de tener una tabla con cada año como columna, obtengo una tabla con una columna de año y otra con los valores por cada año para cada país. ^~\[Guardo la base long en una nueva variable para tener un registro de los cambios en la base de datos\]~^
 
 ```{r}
 internet_long <- internet %>%
   pivot_longer(
-    cols = -c(Country.Name, Country.Code, Indicator.Name, Indicator.Code),
+    cols = starts_with("x"),
     names_to = "year",
     values_to = "internet_users"
-  )
-```
-
-Con [***drop_na***]{.underline} elimino los datos NA de la tabla para quedarme solo con los que necesito de cada país.
-
-```{r}
-internet_long <- internet_long %>%
+  ) %>%
+  mutate(year = as.numeric(gsub("x|X", "", year))) %>%
+  filter(year >= 2013 & year <= 2023) %>%
   drop_na(internet_users)
 ```
 
+Con [***drop_na***]{.underline} elimino los datos NA de la tabla para quedarme solo con los datos de usuarios que necesito de cada país.
+
 ## 4) Cruce de Datos
 
-Con ***left_join*** unifico las bases de datos de [*internet*]{.underline} y de [*metadata*]{.underline} para tener un solo dataframe. Al hacer left join lo que hago es: agregar al dataframe de [*internet*]{.underline} las columnas de [*metadata*]{.underline} que no aparecen en el primero ( Income group, Region) ~*\[Para\ no\ perder\ datos\ hago\ el\ left_join\ en\ un\ nuevo\ dataframe,\ pero\ se\ puede\ modificar\ directamente\ sobre\ la\ base\ de\ datos\ original\]*~
+Con ***left_join*** unifico las bases de datos de [*internet*]{.underline} y de [*metadata*]{.underline} para tener un solo dataframe. Al hacer left join lo que hago es: agregar al dataframe de [*internet*]{.underline} las columnas de [*metadata*]{.underline} que no aparecen en el primero ( Income group, Region) ~*\[Para no perder datos hago el left_join en un nuevo dataframe, pero se puede modificar directamente sobre la base de datos original\]*~
 
 ```{r}
 datos <- internet_long %>% 
-  left_join (metadata, by = "Country.Code")
+  left_join(metadata, by = "country_code") %>%
+  drop_na(income_group)
+```
+
+## 5) Agregación
+
+Para poder testear la hipotesis necesito hacer una tabla que agrupe los High Income y los Low Income y obtener el promedio para cada grupo.
+
+```{r}
+tabla_final <- datos %>%
+  group_by(year, income_group) %>%
+  summarize(
+    promedio_internet = mean(internet_users, na.rm = TRUE),
+    .groups = "drop"
+  )
+```
+
+Con ***group_by*** agrupo en una tabla por año y grupo de ingreso; con ***summarize*** calculo la metrica para grupo presentado. Con la función ***mean*** obtengo el promedio de usuarios de internet de cada grupo en cada año e ignoro los NA's con ***na.rm=TRUE***
+
+Con .***group*** vuelvo a eliminar filas sin datos que no me sirven para el analisis de la hipotesis.
+
+```{r}
+tabla_final$income_group <- factor(
+  tabla_final$income_group,
+  levels = c(
+    "Low income",
+    "Lower middle income",
+    "Upper middle income",
+    "High income"
+  )
+)
+```
+
+Con la funcion ***factor*** se transforma la variable [*“IncomeGroup”*]{.underline} en una tabla ordenado, estableciendo una jerarquía entre los niveles de ingreso presentados para facilitar la interpretación de los resultados y el testeo de la hipotesis.
+
+\# [**Hipotesis**]{.underline}: *"En la última década (2013-2023), las regiones compuestas por países de ingresos bajos (Low income y Lower middle income) han mostrado una tasa de crecimiento porcentual en el acceso a internet superior a la de las regiones de ingresos altos (Upper middle income y High Income), aunque su penetración absoluta siga siendo significativamente menor."*
+
+Luego "despivoteo" la base de datos para que me quede en formato ***Wide*** para una lectura de fatos más facil.
+
+```{r}
+tabla_wide <- tabla_final %>%
+  pivot_wider(
+    names_from = income_group,
+    values_from = promedio_internet
+  ) %>%
+  arrange(year)
+```
+
+Uso la función **arrange** para ordenar los promedios por año y obtener al tabla wide ordenada por año y por ingresos
+
+## Exportar resultados
+
+```{r}
+write.csv(
+  tabla_wide,
+  "../output/resultado_hipotesis.csv",
+  row.names = FALSE
+)
 ```
