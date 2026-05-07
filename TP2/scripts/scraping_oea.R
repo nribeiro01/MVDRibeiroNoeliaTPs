@@ -39,7 +39,7 @@ scrapear_mes <- function(mes){
   
   # Descarga el HTML de la pagina
   html <- read_html(url)
-  
+  Sys.sleep(10)
   # Extraigo los nodos con selector identificado con SelectorGadget
   titulos_nodos <- html |>
     html_elements(".itemmenulink")
@@ -76,7 +76,7 @@ scrapear_cuerpo <- function(link) {
   message("Scrapeando comunicado: ", link)
   
   html_comunicado <- read_html(link)
-  
+  Sys.sleep(10)
   # Selector "#rightmaincol p": busca los <p> DENTRO de #rightmaincol.
   cuerpo <- html_comunicado |>
     html_elements("#rightmaincol") |>
