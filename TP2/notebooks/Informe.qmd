@@ -32,9 +32,7 @@ A partir de un cuerpo de comunicado procesado, se calcularon frecuencias de apar
 
 El gráfico que se presenta a continuación muestra las palabras más comunes en los comunicados analizados. En mi análisis me enfoqué en la frecuencia de los terminos: *misión, derecho, democrático, persona* y *país*
 
-![](images/frecuencia_terminos.png)
-
-Al analizar este gráfico, podemos notar que hay muchas palabras relacionadas con la cooperación regional, la democracia y la institucionalidad. La busqueda de estas palabras sugieren que el discurso de la OEA se centra en su rol de promoción institucional y acompañamiento político en los países miembros
+![](images/clipboard-3974063812.png)Al analizar este gráfico, podemos notar que hay muchas palabras relacionadas con la cooperación regional, la democracia y la institucionalidad. La busqueda de estas palabras sugieren que el discurso de la OEA se centra en su rol de promoción institucional y acompañamiento político en los países miembros
 
 - **“Misión”**: alta frecuencia, asociada a actividades operativas como observación electoral y presencia de la organización en el terreno.
 
