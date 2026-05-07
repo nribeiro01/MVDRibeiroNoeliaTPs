@@ -4,7 +4,7 @@
 library(tidyverse)
 library(tidytext)
 library(here)
-
+library(tm)
 message("Iniciando calculo de metricas y generacion de figuras")
 
 # ==============================================================
@@ -18,10 +18,14 @@ comunicados_lemas <- readRDS(here("TP2/output/processed_text.rds"))
 # 2. Matriz de Frecuencia de Terminos (DTM)
 
 # Contamos cuantas veces aparece cada lemma por documento
-# y calculamos el TF-IDF con bind_tf_idf() de tidytext
-comunicados_tfidf <- comunicados_lemas |>
-  count(id, titulo, lemma) |>
-  bind_tf_idf(lemma, id, n)
+# 
+frecuencia_tokens <- comunicados_lemas |>
+  count(id, lemma, name = "n") |>
+  arrange(id)
+
+matriz_dtm <- frecuencia_tokens |>
+  cast_dtm(document = id, term = lemma, value = n)
+
 
 message("DTM calculada")
 
@@ -35,12 +39,12 @@ comunicados_lemas |> count(lemma, sort = TRUE) |> head(20)
 # Seleccion  5 terminos que me interesan
 terminos_seleccionados <- c("democrático", "derecho", "misión", "persona", "país")
 
+matriz_dtm_de_interes <- matriz_dtm[, colnames(matriz_dtm) %in% terminos_seleccionados]
 # Filtramos la DTM para quedarnos solo con esos terminos
 # y sumamos la frecuencia total a lo largo de todos los comunicados
-frecuencia_terminos <- comunicados_tfidf |>
-  filter(lemma %in% terminos_seleccionados) |>
-  group_by(lemma) |>
-  summarise(frecuencia_total = sum(n)) |>
+frecuencia_terminos <- as.data.frame(as.matrix(matriz_dtm_de_interes)) |>
+  summarise(across(everything(), sum)) |>
+  pivot_longer(everything(), names_to = "lemma", values_to = "frecuencia_total") |>
   arrange(desc(frecuencia_total))
 
 message("Frecuencia de terminos calculada")
