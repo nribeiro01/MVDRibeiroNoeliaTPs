@@ -1,0 +1,562 @@
+---
+title: "Regresión Logística sobre el Census Income (EE. UU.)"
+format:
+  html:
+    toc: true
+    code-fold: true
+    self-contained: true
+execute:
+  echo: true
+  warning: false
+---
+
+# 0. Preparación, carga y limpieza de datos
+
+```{r}
+# Cargamos pacman para gestionar paquetes
+if (!require("pacman")) install.packages("pacman")
+
+pacman::p_load(
+  here,             # rutas relativas reproducibles
+  tidyverse,        # manipulación y visualización
+  scales,           # formateo de ejes
+  marginaleffects,  # efectos marginales promedio
+  broom,            # tidy de modelos
+  kableExtra,       # tablas estéticas
+  patchwork         # combinar gráficos
+)
+```
+
+Cargo la libreria ***here*** para poder cargar los datos desde una ruta relativa. Con la función mutate modifico la variable income: la cambio a [*factor*]{.underline} para que clasifique en niveles los ingresos dependiendo el valor que se tome. El modelo `glm()` que usaremos más adelante necesita saber cuál es el evento que se quiere predecir. Al definir los niveles en ese orden, R toma `<=50K` como la categoría de referencia (el "0") y `>50K` como el evento a predecir (el "1").
+
+```{r}
+df_raw <- read_csv(here("TP3", "data", "adult_census_USA.csv"))
+
+df_raw <- df_raw |>
+  mutate(
+    income = factor(income, levels = c("<=50K", ">50K"))
+  )
+
+levels(df_raw$income)
+```
+
+##### Limpieza y recodificación de variables:
+
+```{r}
+# Limpieza y recodificación de variables
+df <- df_raw |>
+  mutate(
+
+    # Estado civil → binaria
+    # Referencia: "single" → para medir el "bonus" de estar casado
+    married = factor(
+      if_else(marital_status %in% c("Married-civ-spouse", "Married-AF-spouse"),
+              "married", "single"),
+      levels = c("single", "married")
+    ),
+
+    # Ocupación → 3 grupos conceptuales
+    # Referencia: "Service" → grupo de menores ingresos esperados
+    occ_group = factor(
+      case_when(
+        occupation %in% c("Exec-managerial", "Prof-specialty",
+                          "Tech-support", "Adm-clerical", "Sales") ~ "White-collar",
+        occupation %in% c("Craft-repair", "Machine-op-inspct",
+                          "Transport-moving", "Farming-fishing",
+                          "Handlers-cleaners", "Armed-Forces")     ~ "Blue-collar",
+        TRUE                                                        ~ "Service"
+      ),
+      levels = c("Service", "White-collar", "Blue-collar")
+    ),
+
+    # Sector laboral → 3 grupos
+    # Referencia: "Private" → sector más numeroso
+    work_group = factor(
+      case_when(
+        workclass == "Private"                                      ~ "Private",
+        workclass %in% c("State-gov", "Federal-gov", "Local-gov")  ~ "Government",
+        workclass %in% c("Self-emp-inc", "Self-emp-not-inc")       ~ "Self-employed",
+        TRUE                                                        ~ NA_character_
+      ),
+      levels = c("Private", "Government", "Self-employed")
+    ),
+
+    # Sexo → "Female" como referencia para medir la brecha de género
+    sex = factor(sex, levels = c("Female", "Male")),
+
+    # Capital gain → log1p para comprimir la distribución sesgada
+    log_cap_gain = log1p(capital_gain)
+
+  ) |>
+  # Eliminamos filas con NA (workclass "Without-pay" queda como NA)
+  drop_na(work_group) |>
+  # Nos quedamos solo con las variables que vamos a usar
+  select(income, age, education_num, married, sex,
+         hours_per_week, log_cap_gain, occ_group, work_group)
+
+glimpse(df)
+```
+
+> - **`married`**: `marital_status` tiene 7 categorías muy detalladas. Se simplifica a dos porque lo que importa teóricamente es si la persona tiene cónyuge o no. La referencia es `"single"` para que el modelo diga cuánto *suma* estar casado.
+> - **`occ_group`**: agrupar 14 ocupaciones en 3 categorías conceptuales (White-collar, Blue-collar, Service) reduce ruido y hace el modelo más interpretable. La referencia es `"Service"` porque es el grupo de menores ingresos esperados, así los OR del resto son ≥ 1 y fáciles de leer.
+> - **`log_cap_gain`**: `capital_gain` tiene una distribución extremadamente sesgada (la mayoría tiene 0, unos pocos tienen valores altísimos). El logaritmo comprime esa escala. Usamos `log1p(x)` = log(x+1) para evitar que `log(0)` dé `-Inf`.
+>   - La regresión logística asume que la relación entre el predictor y el log-odds es **lineal**. Con una distribución tan sesgada, esa relación deja de serlo: pasar de 0 a 1.000 de ganancia de capital es un salto enorme en términos reales, pero pasar de 50.000 a 51.000 casi no cambia nada. El modelo no puede capturar bien esa diferencia.
+> - **`sex`**: ponemos `"Female"` como referencia para que el coeficiente de `"Male"` mida directamente la *brecha* de género
+
+##### Verificacion del balance de los datos
+
+```{r}
+# Verificación del balance de la variable objetivo
+df |>
+  count(income) |>
+  mutate(pct = round(n / sum(n) * 100, 2)) |>
+  kbl(col.names = c("Ingreso", "N", "%"),
+      caption   = "Distribución de la variable objetivo") |>
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE)
+```
+
+> El dataset presenta una distribución equilibrada de la variable objetivo: el 52.3% de los individuos registra ingresos iguales o inferiores a \$50.000 anuales (`<=50K`), mientras que el 47.6% restante supera ese umbral (`>50K`). Dado que ambas clases están representadas en proporciones similares, no es necesario recurrir a técnicas de re-muestreo como *oversampling* o *undersampling*. Esto nos permite ajustar el modelo de regresión logística directamente sobre los datos originales, sin riesgo de que el algoritmo aprenda a predecir sistemáticamente la clase mayoritaria.
+
+# 1. Análisis Exploratorio y Decisiones de Transformación
+
+##### Visualizaciones bivariadas de las distribuciones de los datos
+
+a\) [**Continuas**]{.underline}
+
+Realizamos graficos de densidad que nos muestran la distribución de una variable continua: dónde se concentran los valores, si hay picos, si está sesgada, etc. Al ser dos variables las que se analizan el grafico superpon dos curvas: una para \<=50K y otra para \>50K. De esta forma podemos ver si los grupos se diferencian:
+
+- **Curvas muy separadas** → la variable discrimina bien entre los dos grupos → buen predictor
+- **Curvas muy superpuestas** → la variable no distingue mucho entre los grupos → predictor débil
+
+```{r}
+# Graficamos la distribución de cada variable continua
+# separada por la categoría de ingreso (Y vs X)
+p_age <- ggplot(df, aes(x = age, fill = income, color = income)) +
+  geom_density(alpha = 0.35, linewidth = 0.8) +
+  scale_fill_manual(values  = c("<=50K" = "#4575B4", ">50K" = "#D73027")) +
+  scale_color_manual(values = c("<=50K" = "#4575B4", ">50K" = "#D73027")) +
+  labs(title = "Edad", x = "Edad (años)", y = "Densidad", fill = NULL, color = NULL) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "top",
+        plot.title = element_text(face = "bold"))
+
+p_edu <- ggplot(df, aes(x = education_num, fill = income, color = income)) +
+  geom_density(alpha = 0.35, linewidth = 0.8) +
+  scale_fill_manual(values  = c("<=50K" = "#4575B4", ">50K" = "#D73027")) +
+  scale_color_manual(values = c("<=50K" = "#4575B4", ">50K" = "#D73027")) +
+  labs(title = "Años de educación", x = "education_num", y = "Densidad",
+       fill = NULL, color = NULL) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "top",
+        plot.title = element_text(face = "bold"))
+
+p_hrs <- ggplot(df, aes(x = hours_per_week, fill = income, color = income)) +
+  geom_density(alpha = 0.35, linewidth = 0.8) +
+  scale_fill_manual(values  = c("<=50K" = "#4575B4", ">50K" = "#D73027")) +
+  scale_color_manual(values = c("<=50K" = "#4575B4", ">50K" = "#D73027")) +
+  labs(title = "Horas semanales trabajadas", x = "hours_per_week", y = "Densidad",
+       fill = NULL, color = NULL) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "top",
+        plot.title = element_text(face = "bold"))
+
+p_cap <- ggplot(df, aes(x = log_cap_gain, fill = income, color = income)) +
+  geom_density(alpha = 0.35, linewidth = 0.8) +
+  scale_fill_manual(values  = c("<=50K" = "#4575B4", ">50K" = "#D73027")) +
+  scale_color_manual(values = c("<=50K" = "#4575B4", ">50K" = "#D73027")) +
+  labs(title = "Log(capital_gain + 1)", x = "log1p(capital_gain)", y = "Densidad",
+       fill = NULL, color = NULL) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "top",
+        plot.title = element_text(face = "bold"))
+
+(p_age | p_edu) / (p_hrs | p_cap)
+```
+
+> ### Edad
+>
+> Las curvas están **desplazadas**: los de `<=50K` (azul) se concentran más en personas jóvenes (25-35 años), mientras que los de `>50K` (rojo) tienen su pico más tarde (40-50 años). Eso tiene sentido: a mayor edad, más experiencia y más chances de tener un salario alto.
+>
+> ### Años de educación
+>
+> Las curvas se **superponen bastante** pero con diferencias claras en los picos. El azul (`<=50K`) tiene su masa en `education_num` 9-10 (secundaria completa), mientras que el rojo (`>50K`) tiene más peso en 13-16 (universitario y posgrado). La educación discrimina bien entre los dos grupos.
+>
+> ### Horas semanales
+>
+> Las curvas son muy similares, con un pico dominante en las 40 horas para ambos grupos. La separación es poca, lo que sugiere que esta variable sola no discrimina tanto, aunque igual aporta algo al modelo.
+>
+> ### Log(capital gain + 1)
+>
+> Ambas curvas tienen un pico enorme en 0 (la mayoría no tiene ganancias de capital). Pero el grupo `>50K` (rojo) tiene una cola más larga hacia la derecha, lo que indica que quienes sí tienen ganancias de capital tienden a ser los de ingresos altos. Esto justifica incluirla en el modelo.
+
+[**b)Categoricas**]{.underline}**:**
+
+Para cada categoría, se calcula qué porcentaje de personas tiene `>50K` y lo muestra en una barra horizontal. Con la función ***group_by*** se agrupa por la variable categórica (ej. `sex`) **y** por `income`, y cuenta cuántas personas hay en cada combinación. Por ejemplo: cuántas mujeres con `<=50K`, cuántas mujeres con `>50K`, cuántos hombres con `<=50K`, etc.
+
+Dentro de cada categoría (ej. dentro de "Female"), el modelo calcula qué proporción representa cada nivel de ingreso. Divide el N de cada fila por el total de esa categoría.
+
+```{r}
+plot_prop <- function(var, titulo) {
+  df |>
+    group_by(across(all_of(var)), income) |>
+    summarise(n = n(), .groups = "drop") |>
+    
+    group_by(across(all_of(var))) |>
+    mutate(pct = n / sum(n)) |>
+    filter(income == ">50K") |>
+    rename(cat = 1) |>
+    
+    ggplot(aes(x = reorder(cat, pct), y = pct, fill = cat)) +
+    geom_col(alpha = 0.85, width = 0.55) +
+    coord_flip() +
+    scale_y_continuous(labels = percent_format()) +
+    scale_fill_brewer(palette = "Set2") +
+    labs(title = titulo, x = NULL, y = "% con >50K") +
+    theme_minimal(base_size = 12) +
+    theme(legend.position = "none",
+          plot.title = element_text(face = "bold"))
+}
+
+p_sex     <- plot_prop("sex",        "Sexo")
+p_married <- plot_prop("married",    "Estado civil")
+p_occ     <- plot_prop("occ_group",  "Tipo de ocupación")
+p_work    <- plot_prop("work_group", "Sector laboral")
+
+(p_sex | p_married) / (p_occ | p_work)
+```
+
+> ### Sexo
+>
+> La brecha es enorme. Casi el **45% de los hombres** supera los \$50K, frente a apenas el **15% de las mujeres**. Esto indica que el género va a ser uno de los predictores más fuertes del modelo.
+>
+> ### Estado civil
+>
+> Los **casados** superan el 60% de probabilidad de ingresos altos, mientras que los **solteros** apenas llegan al 15%. La diferencia es muy marcada. Puede reflejar tanto mayor estabilidad laboral como el hecho de que los casados tienden a ser adultos más maduros con más experiencia.
+>
+> ### Tipo de ocupación
+>
+> Los trabajadores **White-collar** (ejecutivos, profesionales, ventas) superan el 40%, los **Blue-collar** rondan el 30%, y los de **Service** están por debajo del 20%. La jerarquía es clara y tiene sentido teórico.
+>
+> ### Sector laboral
+>
+> Los **autónomos incorporados** (Self-employed) tienen la tasa más alta (\~60%), seguidos del **sector gubernamental** (\~55%), y finalmente el sector **privado** (\~40%). Sorprende que el gobierno supere al sector privado, posiblemente por la estabilidad y los beneficios de los empleos públicos.
+
+c\) [**Interacción**]{.underline}:
+
+```{r}
+df |>
+  group_by(married, sex, income) |>
+  summarise(n = n(), .groups = "drop") |>
+  group_by(married, sex) |>
+  mutate(pct = n / sum(n)) |>
+  filter(income == ">50K") |>
+  ggplot(aes(x = married, y = pct, color = sex, group = sex)) +
+  geom_line(linewidth = 1.3) +
+  geom_point(size = 4) +
+  scale_y_continuous(labels = percent_format()) +
+  scale_color_manual(values = c("Female" = "#4575B4", "Male" = "#D73027")) +
+  labs(
+    title    = "Proporción de >50K por estado civil y sexo",
+    subtitle = "Las líneas no son paralelas: justificación de la interacción married × sex",
+    x = NULL, y = "% con >50K", color = NULL
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "top",
+        plot.title    = element_text(face = "bold"),
+        plot.subtitle = element_text(color = "gray40"))
+```
+
+El gráfico revela que el efecto del matrimonio sobre la probabilidad de superar los \$50.000 anuales **no es igual para hombres y mujeres**. Entre las personas solteras, los hombres tienen una ventaja moderada (\~21% vs \~13%). Sin embargo, al pasar al grupo de casados, esa brecha no solo desaparece sino que se invierte levemente: las mujeres casadas superan en proporción a los hombres casados (\~71% vs \~68%). Esto sugiere que el matrimonio tiene un efecto diferencial según el género: mientras que para los hombres el incremento es importante pero moderado, para las mujeres representa un salto mucho más pronunciado en términos relativos. Este fenómeno puede explicarse por la selección positiva hacia el matrimonio entre mujeres con trayectorias laborales consolidadas, o por el acceso a mayores recursos del hogar que facilitan una mayor dedicación al trabajo. Esta divergencia justifica teórica y visualmente la inclusión del término de interacción `married × sex` en el modelo.
+
+# 2. Ajuste de Modelos (Regresión Logística)
+
+En esta sección ajustamos dos modelos de regresión logística binomial usando la función `glm()` de R con `family = binomial(link = "logit")`. La regresión logística es la herramienta adecuada cuando la variable respuesta es dicotómica —en nuestro caso, si el ingreso supera o no los \$50.000 anuales— ya que modela la probabilidad del evento de interés manteniéndola siempre dentro del rango \[0, 1\], algo que una regresión lineal ordinaria no garantiza.
+
+--\> El **Modelo 1** es el modelo base: incluye todos los predictores seleccionados sin ninguna interacción entre ellos. Asume que el efecto de cada variable sobre el ingreso es independiente del valor que tomen las demás.
+
+--\> El **Modelo 2** incorpora el término de interacción `married × sex` que justificamos en la sección anterior, permitiendo que el efecto del estado civil sobre el ingreso varíe según el sexo del individuo. Comparar ambos modelos nos permitirá evaluar si esa complejidad adicional mejora nuestra capacidad explicativa.
+
+```{r}
+# -----------------------------------------------------------------------
+# Modelo 1 (Base): sin interacciones
+# -----------------------------------------------------------------------
+m1 <- glm(
+  income ~ age + education_num + married + sex +
+    hours_per_week + log_cap_gain + occ_group + work_group,
+  data   = df,
+  family = binomial(link = "logit")
+)
+
+summary(m1)
+```
+
+> El Modelo 1 permite identificar qué factores sociodemográficos y laborales determinan que un ciudadano estadounidense pertenezca al estrato de altos ingresos:
+>
+> **Factores demográficos:**
+>
+> - **Edad:** a mayor edad, mayores chances de superar los \$50.000 anuales, reflejando la acumulación de experiencia y capital humano a lo largo de la trayectoria laboral.
+>
+> - **Educación:** es uno de los determinantes más fuertes del modelo. A mayor escolaridad, mayor probabilidad de pertenecer al estrato de altos ingresos.
+>
+> - **Género:** ser hombre se asocia con una ventaja significativa respecto a las mujeres, resultado consistente con la brecha salarial de género documentada en el mercado laboral estadounidense.
+>
+> - **Estado civil:** estar casado se asocia fuertemente con ingresos altos, posiblemente vinculado a mayor estabilidad laboral y madurez en la trayectoria profesional.
+>
+> **Factores laborales:**
+>
+> - **Horas semanales:** mayor dedicación horaria se asocia positivamente con ingresos altos.
+>
+> - **Ganancias de capital:** tener ingresos provenientes de activos financieros es un predictor fuerte del estrato alto.
+>
+> - **Tipo de ocupación:** los trabajadores de cuello blanco tienen una ventaja clara respecto a los de servicios. Los de cuello azul, en cambio, no muestran una diferencia estadísticamente significativa.
+>
+> - **Sector laboral:** los autónomos incorporados presentan menores chances respecto al sector privado, posiblemente por la mayor variabilidad de sus ingresos.
+
+```{r}
+# -----------------------------------------------------------------------
+# Modelo 2 (Interactivo): interacción married × sex
+# Hipótesis: el efecto de estar casado sobre el ingreso no es igual
+# para hombres y mujeres. Un hombre casado se beneficia del rol de
+# proveedor principal (male breadwinner), mientras que una mujer casada
+# puede ver reducida su dedicación laboral por responsabilidades del hogar.
+# -----------------------------------------------------------------------
+m2 <- glm(
+  income ~ age + education_num + married * sex +
+    hours_per_week + log_cap_gain +
+    occ_group + work_group,
+  data   = df,
+  family = binomial(link = "logit")
+)
+
+summary(m2)
+```
+
+La interacción `married × sex`, que resultó altamente significativo (p \< 2e-16). El coeficiente negativo de `-1.21` indica que el efecto del matrimonio sobre el ingreso es **menor para los hombres que para las mujeres**. En otras palabras, si bien tanto hombres como mujeres se benefician de estar casados, ese beneficio es relativamente más pronunciado para las mujeres. Esto puede interpretarse como evidencia de una selección positiva: las mujeres que se casan y permanecen en el mercado laboral tienden a tener trayectorias profesionales más consolidadas, mientras que para los hombres el matrimonio es una condición más extendida y menos selectiva en términos de ingreso.
+
+La inclusión de esta interacción además liberó el efecto propio de `sexMale`, que en el Modelo 1 no era significativo y ahora sí lo es, sugiriendo que la brecha de género en el ingreso existe de forma independiente al estado civil.
+
+# 3. Interpretación de resultados:
+
+```{r}
+or_table <- tidy(m2, exponentiate = TRUE, conf.int = TRUE) |>
+  filter(term != "(Intercept)") |>
+  mutate(
+    significativo = case_when(
+      p.value < 0.001 ~ "***",
+      p.value < 0.01  ~ "**",
+      p.value < 0.05  ~ "*",
+      p.value < 0.1   ~ ".",
+      TRUE            ~ ""
+    )
+  ) |>
+  select(term, estimate, conf.low, conf.high, p.value, significativo)
+
+or_table |>
+  kbl(
+    digits    = 3,
+    col.names = c("Predictor", "Odds Ratio", "IC Inf. (95%)",
+                  "IC Sup. (95%)", "p-valor", "Sig."),
+    caption   = "Odds Ratios del Modelo 2 (Interactivo)"
+  ) |>
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = TRUE) |>
+  column_spec(2, bold = TRUE) |>
+  row_spec(which(or_table$p.value < 0.05), background = "#f0f8ff")
+```
+
+#### Resultados:
+
+La tabla de Odds Ratios del Modelo 2 permite cuantificar el efecto de cada predictor sobre las chances de pertenecer al estrato de altos ingresos, manteniendo constantes el resto de las variables.
+
+**Factores demográficos:**
+
+- **Estado civil:** es el predictor más poderoso del modelo. Para las mujeres, estar casada multiplica por **27.4** las chances de superar los \$50.000 anuales respecto a estar soltera. Este efecto refleja una fuerte selección positiva hacia el matrimonio entre mujeres con trayectorias laborales consolidadas.
+
+- **Interacción `marriedmarried:sexMale`:** OR de **0.297**, altamente significativo (p \< 2e-16). Para los hombres, el efecto multiplicador del matrimonio se reduce drásticamente: en lugar de multiplicar por 27.4, multiplica por aproximadamente 8.1 (27.4 × 0.297). El matrimonio sigue siendo muy beneficioso para los hombres, pero lo es proporcionalmente mucho más para las mujeres.
+
+- **Sexo:** ser hombre multiplica por **2.54** las chances de ingresos altos respecto a las mujeres entre las personas solteras. A diferencia del Modelo 1, este efecto ahora es significativo (p \< 2e-16) porque la interacción separa correctamente el efecto propio del género del efecto del matrimonio.
+
+- **Educación:** cada año adicional de escolaridad multiplica por **1.37** las chances de ingresos altos, confirmando el rol central del capital humano.
+
+- **Edad:** cada año adicional multiplica por **1.04** las chances, reflejando la acumulación gradual de experiencia laboral.
+
+**Factores laborales:**
+
+- **Ocupación:** los trabajadores de cuello blanco tienen **2.51 veces** más chances de ingresos altos respecto a los de servicios. A diferencia del Modelo 1, los de cuello azul ahora también muestran una diferencia significativa (**OR = 1.20**, p = 0.044).
+
+- **Horas semanales:** cada hora adicional trabajada por semana multiplica por **1.037** las chances de ingresos altos, un efecto pequeño pero consistente y significativo.
+
+- **Ganancias de capital:** cada unidad adicional de log(capital gain + 1) multiplica por **1.22** las chances, reflejando que los individuos con activos financieros tienen una ventaja clara para pertenecer al estrato alto.
+
+- **Sector laboral:** los autónomos incorporados son el único grupo con OR menor a 1 significativo (**0.82**), indicando menores chances respecto al sector privado. El sector gobierno, en cambio, ahora muestra una ventaja significativa respecto al privado (**OR = 1.14**, p = 0.038).
+
+### Forest Plot
+
+```{r}
+# -----------------------------------------------------------------------
+# Forest plot: Modelo 2 (married × sex)
+# -----------------------------------------------------------------------
+z80 <- qnorm(0.90)
+z95 <- qnorm(0.975)
+z99 <- qnorm(0.995)
+
+or_forest <- tidy(m2) |>
+  filter(term != "(Intercept)") |>
+  mutate(
+    or   = exp(estimate),
+    lo80 = exp(estimate - z80 * std.error),
+    hi80 = exp(estimate + z80 * std.error),
+    lo95 = exp(estimate - z95 * std.error),
+    hi95 = exp(estimate + z95 * std.error),
+    lo99 = exp(estimate - z99 * std.error),
+    hi99 = exp(estimate + z99 * std.error),
+    sig  = p.value < 0.05,
+    term = str_replace_all(term, c(
+      "marriedmarried:sexMale"   = "Casado/a × Male",
+      "marriedmarried"           = "Casado/a",
+      "education_num"            = "Años de educación",
+      "age"                      = "Edad",
+      "sexMale"                  = "Sexo: Male",
+      "hours_per_week"           = "Horas/semana",
+      "log_cap_gain"             = "log(capital gain + 1)",
+      "occ_groupWhite-collar"    = "Ocup: White-collar",
+      "occ_groupBlue-collar"     = "Ocup: Blue-collar",
+      "work_groupGovernment"     = "Sector: Gobierno",
+      "work_groupSelf-employed"  = "Sector: Autónomo"
+    ))
+  )
+
+ggplot(or_forest, aes(y = reorder(term, or))) +
+  geom_segment(aes(x = lo99, xend = hi99, yend = reorder(term, or)),
+               linewidth = 0.7, color = "gray70") +
+  geom_segment(aes(x = lo95, xend = hi95, yend = reorder(term, or)),
+               linewidth = 1.5, color = "gray50") +
+  geom_segment(aes(x = lo80, xend = hi80, yend = reorder(term, or)),
+               linewidth = 3, color = "gray35") +
+  geom_point(aes(x = or, color = sig), size = 3.5, shape = 18) +
+  geom_vline(xintercept = 1, linetype = "dashed",
+             color = "#CC0000", linewidth = 0.8) +
+  scale_x_log10(labels = number_format(accuracy = 0.01)) +
+  scale_color_manual(values = c("TRUE"  = "#1A5276",
+                                "FALSE" = "#AAAAAA"),
+                     labels = c("TRUE"  = "p < 0.05",
+                                "FALSE" = "p ≥ 0.05")) +
+  labs(
+    title    = "Forest plot: Odds Ratios del Modelo 2",
+    subtitle = "Barras: 80% (grueso) · 95% (mediano) · 99% (fino) | Escala logarítmica en X",
+    x = "Odds Ratio (escala log)", y = NULL, color = "Significancia"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position    = "bottom",
+    plot.title         = element_text(face = "bold", size = 14),
+    plot.subtitle      = element_text(color = "gray40", size = 10),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor   = element_blank(),
+    axis.text.y        = element_text(size = 11)
+  )
+```
+
+El forest plot permite visualizar de forma simultánea la dirección, magnitud e incertidumbre de cada predictor del modelo. La línea roja punteada en OR = 1 actúa como referencia: los predictores cuyas barras de confianza no la cruzan son estadísticamente significativos.
+
+- **Estado civil:** el punto azul de `Casado/a` se ubica en el extremo derecho del gráfico (\~27), muy alejado de la línea de referencia y con una barra de confianza notablemente angosta, lo que indica un efecto enorme y estimado con alta precisión. Este OR corresponde al efecto del matrimonio para las mujeres (categoría de referencia de `sex`).
+
+<!-- -->
+
+- **Interacción `Casado/a × Male`:** se ubica en el extremo izquierdo del gráfico (\~0.30), también con una barra angosta y altamente significativo. Refleja que para los hombres el efecto multiplicador del matrimonio se reduce drásticamente, aunque sigue siendo positivo al combinarlo con el efecto principal de `Casado/a`.
+
+<!-- -->
+
+- **Sexo: Male y Ocup: White-collar:** ambos puntos azules se ubican alrededor de \~2.5, con barras que no cruzan la línea de referencia. Ser hombre y trabajar en ocupaciones de cuello blanco casi triplican las chances de ingresos altos respecto a sus categorías de referencia.
+
+<!-- -->
+
+- **Años de educación y log(capital gain):** puntos azules cercanos a 1 pero sin cruzar la línea de referencia, reflejando efectos moderados pero consistentes y estadísticamente robustos a los tres niveles de confianza graficados.
+
+### Efectos marginales:
+
+```{r}
+# -----------------------------------------------------------------------
+# Efectos Marginales Promedio (AME)
+# Modelo 2 (married × sex)
+# -----------------------------------------------------------------------
+ame <- avg_slopes(m2)
+
+ame |>
+  as_tibble() |>
+  select(term, contrast, estimate, conf.low, conf.high, p.value) |>
+  mutate(
+    estimate  = round(estimate  * 100, 2),
+    conf.low  = round(conf.low  * 100, 2),
+    conf.high = round(conf.high * 100, 2),
+    p.value   = round(p.value, 4),
+    sig = case_when(
+      p.value < 0.001 ~ "***",
+      p.value < 0.01  ~ "**",
+      p.value < 0.05  ~ "*",
+      p.value < 0.1   ~ ".",
+      TRUE            ~ ""
+    )
+  ) |>
+  kbl(
+    col.names = c("Variable", "Contraste", "AME (pp)",
+                  "IC Inf. (pp)", "IC Sup. (pp)", "p-valor", "Sig."),
+    caption   = "Efectos Marginales Promedio — Modelo 2 (married × sex)"
+  ) |>
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = TRUE) |>
+  column_spec(3, bold = TRUE) |>
+  row_spec(0, bold = TRUE, background = "#2C3E50", color = "white")
+```
+
+La tabla nos muestra cuántos [***puntos porcentualescambiala probabilidad***]{.underline} de ganar más de \$50.000 anuales ante un cambio en cada predictor, promediando ese efecto sobre toda la muestra.
+
+- **Estado civil:** es el predictor con mayor impacto del modelo. Pasar de soltero a casado aumenta la probabilidad de ingresos altos en **38.9 puntos porcentuales** en promedio. Este efecto promedia el impacto del matrimonio tanto para hombres como para mujeres, ocultando la heterogeneidad que la interacción captura: el salto es proporcionalmente mucho mayor para las mujeres que para los hombres.
+
+- **Sexo:** a diferencia del Modelo 1, el efecto promedio del género no resulta significativo en los AME (p = 0.106). Esto se explica porque al promediar sobre casados y solteros, el efecto del género se diluye: entre solteros los hombres tienen ventaja, pero entre casados esa ventaja desaparece. La interacción captura esa complejidad mejor que un efecto promedio.
+
+- **Educación:** cada año adicional de escolaridad aumenta la probabilidad en **4.18 puntos porcentuales**, confirmando el rol central del capital humano independientemente del género o estado civil.
+
+- **Ocupación White-collar:** trabajar en ocupaciones de cuello blanco aumenta la probabilidad en **12.82 puntos porcentuales** respecto a los de servicios, el segundo efecto más grande del modelo.
+
+  El resto de los predictores muestran efectos pequeños pero significativos, con excepción del sector autónomo que es el único con efecto negativo (**-2.66 pp**).
+
+# 4. Comparación Global de Modelos
+
+Comparación sobre el ajuste global de los dos modelos para ver si agregar la interacción `education_num × sex` mejoró o no el modelo.
+
+```{r}
+# -----------------------------------------------------------------------
+# Comparación global de modelos actualizada
+# -----------------------------------------------------------------------
+comp <- bind_rows(
+  glance(m1) |> mutate(modelo = "Modelo 1 (Base)"),
+  glance(m2) |> mutate(modelo = "Modelo 2 (Interactivo)")
+) |>
+  mutate(
+    pseudo_r2     = round(1 - deviance / null.deviance, 4),
+    AIC           = round(AIC, 1),
+    BIC           = round(BIC, 1),
+    deviance      = round(deviance, 1),
+    null.deviance = round(null.deviance, 1)
+  ) |>
+  select(modelo, null.deviance, deviance, pseudo_r2, AIC, BIC, nobs)
+
+comp |>
+  kbl(
+    col.names = c("Modelo", "Deviance Nula", "Deviance Residual",
+                  "Pseudo-R² (McFadden)", "AIC", "BIC", "N"),
+    caption   = "Métricas de Ajuste Global — Comparación de Modelos"
+  ) |>
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE) |>
+  column_spec(4, bold = TRUE) |>
+  row_spec(2, background = "#EAF4FB")
+```
+
+> #### La tabla compara el ajuste global de ambos modelos para evaluar si la inclusión de la interacción `married × sex` mejora la capacidad explicativa del modelo.
+>
+> En el Modelo 1, el efecto del género no resultaba significativo porque el modelo no podía separar correctamente el impacto del sexo del impacto del estado civil: ambos efectos estaban mezclados. Al incorporar la interacción, el modelo logra distinguirlos y revela que ser hombre tiene un efecto propio y significativo sobre el ingreso (OR = 2.54), independientemente de si la persona está casada o no. A su vez, el efecto del matrimonio se desdobla: para las mujeres multiplica por 27 las chances de ingresos altos, mientras que para los hombres ese multiplicador cae a aproximadamente 8. Esto no significa que el matrimonio no beneficie a los hombres, sino que los beneficia proporcionalmente mucho menos porque su ventaja de género ya opera de forma independiente.
+>
+> Esta mayor precisión en la estimación también liberó el efecto de otras variables que en el Modelo 1 no alcanzaban significancia, como la ocupación Blue-collar y el sector gubernamental. En términos de ajuste global, el Modelo 2 reduce el AIC en más de 100 puntos y mejora el Pseudo-R² de 0.3952 a 0.4002, confirmando que la interacción captura un patrón real en los datos y no simplemente agrega complejidad innecesaria.
